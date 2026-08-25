@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Dashboard Tracking CS SKS - Real-time Data Visualization dari Google Sheets Sekolah Kak Seto">
+  <title>Dashboard Tracking CS SKS - Sekolah Kak Seto</title>
+  
+  <!-- Tailwind CSS CDN for utility support & Chart.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Custom Design System Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="dashboard-container">
+    
+    <!-- CONTAINER LOGO SEKOLAH KAK SETO -->
+    <div class="brand-banner">
+      <img 
+        src="img/logo-kakseto.jpeg" 
+        alt="Logo Sekolah Kak Seto" 
+        class="brand-logo" 
+        onerror="this.onerror=null; this.src='https://dummyimage.com/600x200/ffffff/ed1c24&text=SEKOLAH+KAK+SETO';"
+      >
+    </div>
+    
+    <!-- HEADER DASHBOARD & FILTER PERIODE -->
+    <header class="dashboard-header">
+      <div class="header-title-group">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h1>Dashboard Tracking CS SKS</h1>
+          <span id="activePeriodeBadge" class="badge-periode">Bulan: Semua Bulan | Tahun: Semua Tahun</span>
+          <span id="sheetCountBadge" class="badge-source">0 Sheet Terbaca</span>
+        </div>
+        <p>Real-time visualisasi data dinamis dari Google Sheets Sekolah Kak Seto</p>
+      </div>
+      
+      <!-- WRAPPER FILTER TOOLBAR -->
+      <div class="filter-toolbar">
+        <!-- FILTER BULAN -->
+        <div class="filter-group">
+          <label for="monthFilter" class="filter-label">Bulan:</label>
+          <select id="monthFilter" class="filter-select">
+            <option value="ALL" selected>Semua Bulan</option>
+            <option value="01">Januari</option>
+            <option value="02">Februari</option>
+            <option value="03">Maret</option>
+            <option value="04">April</option>
+            <option value="05">Mei</option>
+            <option value="06">Juni</option>
+            <option value="07">Juli</option>
+            <option value="08">Agustus</option>
+            <option value="09">September</option>
+            <option value="10">Oktober</option>
+            <option value="11">November</option>
+            <option value="12">Desember</option>
+          </select>
+        </div>
+
+        <!-- FILTER TAHUN -->
+        <div class="filter-group">
+          <label for="yearFilter" class="filter-label">Tahun:</label>
+          <select id="yearFilter" class="filter-select">
+            <option value="ALL" selected>Semua Tahun</option>
+          </select>
+        </div>
+
+        <!-- FILTER SPESIFIK MENU (CS/UNIT/SUMBER) -->
+        <div class="filter-group">
+          <label for="csFilter" id="filterLabel" class="filter-label">Filter CS:</label>
+          <select id="csFilter" class="filter-select">
+            <option value="ALL">Semua Data</option>
+          </select>
+        </div>
+
+        <!-- TOMBOL SYNC DATA -->
+        <button id="syncBtn" class="btn-sync" title="Sinkronisasi ulang data dari Google Sheets">
+          <span class="sync-icon">🔄</span>
+          <span class="sync-text">Sync Data</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- STATUS BAR SINKRONISASI -->
+    <div id="syncStatusBar" class="sync-status-bar status-loading" style="display: none;">
+      <span id="syncStatusText">Memuat data dari Google Sheets...</span>
+      <span id="syncStatusTime" class="text-xs opacity-75"></span>
+    </div>
+
+    <!-- NAVIGASI MENU TAB -->
+    <nav class="tabs-nav" aria-label="Menu Dashboard">
+      <button id="tab-report_leads" class="tab-btn active">
+        <span>📋</span> 1. Report Leads
+      </button>
+      <button id="tab-rekap_cmb" class="tab-btn">
+        <span>👥</span> 2. Rekapitulasi CMB
+      </button>
+      <button id="tab-rekap_murid" class="tab-btn">
+        <span>🎓</span> 3. Rekapitulasi Murid
+      </button>
+    </nav>
+
+    <!-- METRICS CARD CONTAINER -->
+    <div id="metricsContainer" class="metrics-grid">
+      <!-- Kartu Metrik Diisi Dinamis Lewat JS -->
+    </div>
+
+    <!-- GRAFIK PIE & VISUALISASI -->
+    <section class="chart-section" id="chartCard">
+      <h2 id="chartTitle" class="section-title">📊 Persentase & Distribusi Data</h2>
+      <div class="chart-wrapper">
+        <canvas id="mainChart"></canvas>
+      </div>
+    </section>
+
+    <!-- CONTAINER TABEL DINAMIS -->
+    <main id="dynamicTableContainer" class="tables-container">
+      <!-- Diisi oleh JS -->
+    </main>
+
+    <!-- FOOTER INFORMASI -->
+    <footer class="dashboard-footer">
+      <p>&copy; 2026 Sekolah Kak Seto &bull; Dashboard Tracking Real-time Google Sheets</p>
+    </footer>
+
+  </div>
+
+  <!-- Main JavaScript File -->
+  <script src="script.js" defer></script>
+</body>
+</html>
