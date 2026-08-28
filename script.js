@@ -923,23 +923,18 @@
     const metricsContainer = document.getElementById('metricsContainer');
     if (metricsContainer) {
       metricsContainer.innerHTML = `
+      <div class="metric-card border-blue">
+        <p class="metric-card-title">Closing Formulir</p>
+        <p class="metric-card-value text-blue-600">${grandClosingForm.toLocaleString('id-ID')}</p>
+      </div>
+      <div class="metric-card border-rose">
+        <p class="metric-card-title">Cancel Pendaftaran</p>
+        <p class="metric-card-value text-rose-600">${grandCancel.toLocaleString('id-ID')}</p>
+      </div>
         <div class="metric-card border-teal">
           <p class="metric-card-title">Lanjut Pendaftaran</p>
           <p class="metric-card-value text-teal-700">${grandLanjutPendaftaran.toLocaleString('id-ID')}</p>
           <p class="metric-card-subtitle">= Closing Formulir (${grandClosingForm}) - Cancel (${grandCancel})</p>
-        </div>
-        <div class="metric-card border-purple">
-          <p class="metric-card-title">Formulir (Proses)</p>
-          <p class="metric-card-value text-purple-700">${grandFormulirProses.toLocaleString('id-ID')}</p>
-          <p class="metric-card-subtitle">= Lanjut (${grandLanjutPendaftaran}) - UP Selesai (${grandUPSelesai}) - UP Proses (${grandUPProses})</p>
-        </div>
-        <div class="metric-card border-blue">
-          <p class="metric-card-title">Closing Formulir</p>
-          <p class="metric-card-value text-blue-600">${grandClosingForm.toLocaleString('id-ID')}</p>
-        </div>
-        <div class="metric-card border-rose">
-          <p class="metric-card-title">Cancel Pendaftaran</p>
-          <p class="metric-card-value text-rose-600">${grandCancel.toLocaleString('id-ID')}</p>
         </div>
         <div class="metric-card border-amber">
           <p class="metric-card-title">Uang Pangkal (Proses)</p>
@@ -948,6 +943,11 @@
         <div class="metric-card border-emerald">
           <p class="metric-card-title">Uang Pangkal (Selesai)</p>
           <p class="metric-card-value text-emerald-700">${grandUPSelesai.toLocaleString('id-ID')}</p>
+        </div>
+        <div class="metric-card border-purple">
+          <p class="metric-card-title">Formulir (Proses)</p>
+          <p class="metric-card-value text-purple-700">${grandFormulirProses.toLocaleString('id-ID')}</p>
+          <p class="metric-card-subtitle">= Lanjut (${grandLanjutPendaftaran}) - UP Selesai (${grandUPSelesai}) - UP Proses (${grandUPProses})</p>
         </div>
       `;
     }
@@ -993,12 +993,12 @@
 
         uniquePrograms.forEach(prog => {
           const progItems = jenjItems.filter(d => d.program === prog);
-          
+
           let progClosingForm = 0;
           let progUPProses = 0;
           let progUPSelesai = 0;
           let progCancel = 0;
-          
+
           progItems.forEach(item => {
             progClosingForm += item.closingForm || 0;
             progUPProses += item.upProses || 0;
