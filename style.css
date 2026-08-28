@@ -635,6 +635,150 @@ body {
   max-width: 480px;
 }
 
+/* Hierarchical Table & Status Highlights for Rekapitulasi CMB */
+.custom-table td.unit-cell {
+  background-color: #f8fafc;
+  font-weight: 800;
+  color: #1e3a8a;
+  vertical-align: middle;
+  border-right: 2px solid #cbd5e1;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+}
+
+.custom-table td.jenjang-cell {
+  background-color: #fcfdfe;
+  font-weight: 700;
+  color: #334155;
+  vertical-align: middle;
+  border-right: 1.5px solid #e2e8f0;
+}
+
+.custom-table td.program-cell {
+  font-weight: 600;
+  color: #1e293b;
+  text-align: left;
+}
+
+.custom-table td.col-closing-form {
+  font-weight: 700;
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.custom-table td.col-cancel {
+  font-weight: 700;
+  background-color: #fff1f2;
+  color: #e11d48;
+}
+
+.custom-table td.col-lanjut {
+  font-weight: 800;
+  background-color: #f0fdfa;
+  color: #0d9488;
+}
+
+.custom-table td.col-up-proses {
+  font-weight: 700;
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+.custom-table td.col-up-selesai {
+  font-weight: 800;
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.custom-table td.col-form-proses {
+  font-weight: 800;
+  background-color: #f5f3ff;
+  color: #7c3aed;
+}
+
+.custom-table tr.subtotal-jenjang-row td {
+  background-color: #fefce8;
+  color: #854d0e;
+  font-weight: 800;
+  font-size: 0.85rem;
+  border-top: 2px solid #fde047;
+  border-bottom: 2px solid #fde047;
+}
+
+.custom-table tr.subtotal-unit-row td {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  font-weight: 800;
+  font-size: 0.875rem;
+  border-top: 2px solid #7dd3fc;
+  border-bottom: 2px solid #7dd3fc;
+}
+
+.metric-card-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  font-weight: 600;
+}
+
+/* Keterangan PIC Details & Chips */
+.ket-cell {
+  text-align: left !important;
+  max-width: 320px;
+  white-space: normal !important;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.ket-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 90px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ket-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ket-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.ket-item {
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  color: #334155;
+}
+
+.ket-item .pic-badge {
+  display: inline-block;
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  margin-left: 0.25rem;
+}
+
+.badge-unit-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #1e3a8a;
+  color: #ffffff;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
 /* Custom Scrollbars */
 .table-responsive::-webkit-scrollbar,
 .tabs-nav::-webkit-scrollbar {

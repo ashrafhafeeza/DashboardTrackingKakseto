@@ -94,7 +94,6 @@
       const fallbackSig = defaultRes?.sig || null;
 
       // Step 2: Generate candidate month-year sheets
-      // We probe years 2024..2027 and all 12 months, plus known tabs
       const currentYear = new Date().getFullYear();
       const yearsToProbe = [currentYear - 1, currentYear, currentYear + 1];
       const candidateNames = [];
@@ -290,25 +289,21 @@
     let cmbUnitCol = -1;
     let cmbJenjangCol = -1;
     let cmbProgCol = -1;
-    let cmbTotCol = -1;
 
-    // Check col labels
+    // 1. Check col labels
     for (let cIdx = 10; cIdx < Math.min(25, cols.length); cIdx++) {
       const label = String(cols[cIdx]?.label || '').toLowerCase();
-      if (label.includes('unit')) cmbUnitCol = cIdx;
-      if (label.includes('jenjang')) cmbJenjangCol = cIdx;
-      if (label.includes('program')) cmbProgCol = cIdx;
-      if (label.includes('closing') || label.includes('pendaftar') || label.includes('total')) {
-        if (cmbTotCol === -1) cmbTotCol = cIdx;
-      }
+      if (label.includes('unit') && cmbUnitCol === -1) cmbUnitCol = cIdx;
+      if (label.includes('jenjang') && cmbJenjangCol === -1) cmbJenjangCol = cIdx;
+      if (label.includes('program') && cmbProgCol === -1) cmbProgCol = cIdx;
     }
 
-    // Fallback: check top 5 rows content
+    // 2. Scan top 10 rows for "Unit", "Jenjang", "Program" headers
     if (cmbUnitCol === -1 || cmbProgCol === -1) {
-      for (let rIdx = 0; rIdx < Math.min(5, rows.length); rIdx++) {
+      for (let rIdx = 0; rIdx < Math.min(10, rows.length); rIdx++) {
         const c = rows[rIdx]?.c || [];
         c.forEach((cell, cIdx) => {
-          if (cIdx >= 10 && cIdx <= 22 && cell && cell.v) {
+          if (cIdx >= 10 && cIdx <= 25 && cell && cell.v) {
             const v = String(cell.v).toLowerCase().trim();
             if (v === 'unit' && cmbUnitCol === -1) cmbUnitCol = cIdx;
             if (v === 'jenjang' && cmbJenjangCol === -1) cmbJenjangCol = cIdx;
@@ -318,37 +313,91 @@
       }
     }
 
+    // 3. Fallback: look for known unit keywords
+    if (cmbUnitCol === -1) {
+      for (let rIdx = 0; rIdx < Math.min(15, rows.length); rIdx++) {
+        const c = rows[rIdx]?.c || [];
+        for (let cIdx = 10; cIdx <= 20; cIdx++) {
+          const v = String(c[cIdx]?.v || '').toUpperCase().trim();
+          if (['HSKS', 'KSS', 'SKKS', 'KSLC'].includes(v)) {
+            cmbUnitCol = cIdx;
+            cmbJenjangCol = cIdx + 1;
+            cmbProgCol = cIdx + 2;
+            break;
+          }
+        }
+        if (cmbUnitCol !== -1) break;
+      }
+    }
+
     if (cmbUnitCol === -1) cmbUnitCol = 14;
     if (cmbJenjangCol === -1) cmbJenjangCol = cmbUnitCol + 1;
     if (cmbProgCol === -1) cmbProgCol = cmbUnitCol + 2;
-    if (cmbTotCol === -1) cmbTotCol = cmbProgCol + 1;
+
+    const colClosingForm = cmbProgCol + 1;
+    const colUPProses = cmbProgCol + 2;
+    const colUPSelesai = cmbProgCol + 3;
+    const colCancel = cmbProgCol + 4;
+    const colOnProgressOld = cmbProgCol + 5;
+    const colKetOnProgress = cmbProgCol + 6;
 
     let currentUnit = '';
     let currentJenjang = '';
 
-    rows.forEach(r => {
+    rows.forEach((r, rIdx) => {
       const c = r.c || [];
       if (!c) return;
 
       if (c[cmbUnitCol]?.v) {
         const u = String(c[cmbUnitCol].v).trim();
-        if (u && !['unit', 'total', 'jumlah', 'formulir', 'cancel', 'lanjut up', 'up finish', 'up proses', 'non up proses'].includes(u.toLowerCase())) {
+        if (u && !['unit', 'total', 'jumlah', 'closing formulir', 'cancel pendaftaran', 'formulir', 'cancel', 'lanjut up', 'up finish', 'up proses', 'non up proses'].includes(u.toLowerCase())) {
           currentUnit = u;
         }
       }
 
       if (c[cmbJenjangCol]?.v) {
         const j = String(c[cmbJenjangCol].v).trim();
-        if (j && !['jenjang', 'total', 'jumlah', 'formulir', 'cancel', 'lanjut up', 'up finish', 'up proses', 'non up proses'].includes(j.toLowerCase())) {
+        if (j && !['jenjang', 'total', 'jumlah', 'closing formulir', 'cancel pendaftaran', 'formulir', 'cancel', 'lanjut up', 'up finish', 'up proses', 'non up proses'].includes(j.toLowerCase())) {
           currentJenjang = j;
         }
       }
 
       if (c[cmbProgCol]?.v) {
         const prog = String(c[cmbProgCol].v).trim();
-        const numVal = parseCellNum(c[cmbTotCol]);
+        const lowerProg = prog.toLowerCase();
 
-        if (prog && !['program', 'jumlah', 'total'].includes(prog.toLowerCase()) && isNaN(Number(prog))) {
+        // ABAIKAN baris header, total, jumlah, atau subtotal ringkasan bawaan sheet agar tidak double
+        if (prog &&
+          !['program', 'jumlah', 'total', 'cancel pendaftaran', 'subtotal', 'rekap'].includes(lowerProg) &&
+          !lowerProg.startsWith('jumlah') &&
+          !lowerProg.startsWith('total') &&
+          isNaN(Number(prog))) {
+
+          const closingForm = parseCellNum(c[colClosingForm]);
+          const upProses = parseCellNum(c[colUPProses]);
+          const upSelesai = parseCellNum(c[colUPSelesai]);
+          const cancel = parseCellNum(c[colCancel]);
+          const onProgressOld = parseCellNum(c[colOnProgressOld]);
+          const ket = c[colKetOnProgress]?.v ? String(c[colKetOnProgress].v).trim() : '';
+
+          // Extract individual candidates from keterangan
+          const candidates = [];
+          if (ket) {
+            ket.split('\n').forEach(line => {
+              const trimmed = line.trim();
+              if (!trimmed) return;
+              let pic = '';
+              const picMatch = trimmed.match(/-\s*(Kak\s+[A-Za-z]+)|(Kak\s+[A-Za-z]+)/i);
+              if (picMatch) {
+                pic = (picMatch[1] || picMatch[2]).trim().replace(/Kak\s+WInda/i, 'Kak Winda');
+              }
+              candidates.push({
+                rawText: trimmed,
+                pic: pic || 'Umum'
+              });
+            });
+          }
+
           parsedCMBData.push({
             sheetName: sheet.sheetName,
             month: sheet.month,
@@ -356,7 +405,14 @@
             unit: currentUnit || 'Umum',
             jenjang: currentJenjang || 'Lainnya',
             program: prog,
-            totalCMB: numVal
+            closingForm,
+            cancel,
+            upProses,
+            upSelesai,
+            onProgressOld,
+            keterangan: ket,
+            candidates,
+            rowIdx: rIdx
           });
         }
       }
@@ -807,7 +863,7 @@
   // --- MENU 2: REKAPITULASI CMB ---
   function renderRekapCMB() {
     const filterLabel = document.getElementById('filterLabel');
-    if (filterLabel) filterLabel.textContent = 'Filter Unit:';
+    if (filterLabel) filterLabel.textContent = 'Filter CS:';
 
     const chartTitle = document.getElementById('chartTitle');
     if (chartTitle) chartTitle.textContent = '📊 Distribusi CMB Per Jenjang';
@@ -815,26 +871,83 @@
     // Filter CMB by date
     const dateFilteredCMB = parsedCMBData.filter(d => matchDateFilter(d.month, d.year));
 
-    // Populate Unit Filter
-    populateSpecificFilter(dateFilteredCMB, 'unit');
+    // Build CS list from candidates for filter population
+    const csSet = new Set();
+    dateFilteredCMB.forEach(d => {
+      if (d.candidates && d.candidates.length > 0) {
+        d.candidates.forEach(c => {
+          if (c.pic && c.pic !== 'Umum') csSet.add(c.pic);
+        });
+      }
+    });
 
-    const selectedUnit = document.getElementById('csFilter')?.value || 'ALL';
-    const finalData = (selectedUnit === 'ALL')
-      ? dateFilteredCMB
-      : dateFilteredCMB.filter(d => d.unit === selectedUnit);
+    // Populate CS Filter
+    const csSelect = document.getElementById('csFilter');
+    if (csSelect) {
+      const currentVal = csSelect.value;
+      csSelect.innerHTML = '<option value="ALL">Semua Data</option>';
+      Array.from(csSet).sort().forEach(cs => {
+        const opt = document.createElement('option');
+        opt.value = cs;
+        opt.textContent = cs;
+        csSelect.appendChild(opt);
+      });
+      if (csSet.has(currentVal)) {
+        csSelect.value = currentVal;
+      } else {
+        csSelect.value = 'ALL';
+      }
+    }
 
-    const totalCMB = finalData.reduce((s, d) => s + d.totalCMB, 0);
-    const units = [...new Set(finalData.map(d => d.unit))];
-    const jenjangs = [...new Set(finalData.map(d => d.jenjang))];
-    const programs = [...new Set(finalData.map(d => d.program))];
+    const finalData = dateFilteredCMB;
 
-    // Render Metric Card
+    // Calculate grand totals
+    let grandClosingForm = 0;
+    let grandCancel = 0;
+    let grandUPProses = 0;
+    let grandUPSelesai = 0;
+    let grandOnProgress = 0;
+
+    finalData.forEach(d => {
+      grandClosingForm += d.closingForm || 0;
+      grandCancel += d.cancel || 0;
+      grandUPProses += d.upProses || 0;
+      grandUPSelesai += d.upSelesai || 0;
+      grandOnProgress += d.onProgressOld || 0;
+    });
+
+    const grandLanjutPendaftaran = Math.max(0, grandClosingForm - grandCancel);
+    const grandFormulirProses = Math.max(0, grandLanjutPendaftaran - grandUPSelesai - grandUPProses);
+
+    // Render Metric Cards
     const metricsContainer = document.getElementById('metricsContainer');
     if (metricsContainer) {
       metricsContainer.innerHTML = `
-        <div class="metric-card col-span-full border-emerald">
-          <p class="metric-card-title">Total Rekapitulasi CMB</p>
-          <p class="metric-card-value text-emerald-700">${totalCMB.toLocaleString('id-ID')}</p>
+        <div class="metric-card border-teal">
+          <p class="metric-card-title">Lanjut Pendaftaran</p>
+          <p class="metric-card-value text-teal-700">${grandLanjutPendaftaran.toLocaleString('id-ID')}</p>
+          <p class="metric-card-subtitle">= Closing Formulir (${grandClosingForm}) - Cancel (${grandCancel})</p>
+        </div>
+        <div class="metric-card border-purple">
+          <p class="metric-card-title">Formulir (Proses)</p>
+          <p class="metric-card-value text-purple-700">${grandFormulirProses.toLocaleString('id-ID')}</p>
+          <p class="metric-card-subtitle">= Lanjut (${grandLanjutPendaftaran}) - UP Selesai (${grandUPSelesai}) - UP Proses (${grandUPProses})</p>
+        </div>
+        <div class="metric-card border-blue">
+          <p class="metric-card-title">Closing Formulir</p>
+          <p class="metric-card-value text-blue-600">${grandClosingForm.toLocaleString('id-ID')}</p>
+        </div>
+        <div class="metric-card border-rose">
+          <p class="metric-card-title">Cancel Pendaftaran</p>
+          <p class="metric-card-value text-rose-600">${grandCancel.toLocaleString('id-ID')}</p>
+        </div>
+        <div class="metric-card border-amber">
+          <p class="metric-card-title">Uang Pangkal (Proses)</p>
+          <p class="metric-card-value text-amber-600">${grandUPProses.toLocaleString('id-ID')}</p>
+        </div>
+        <div class="metric-card border-emerald">
+          <p class="metric-card-title">Uang Pangkal (Selesai)</p>
+          <p class="metric-card-value text-emerald-700">${grandUPSelesai.toLocaleString('id-ID')}</p>
         </div>
       `;
     }
@@ -848,56 +961,152 @@
       return;
     }
 
-    let htmlContent = '';
+    // Build hierarchical table: Unit → Jenjang → Program
+    const units = [...new Set(finalData.map(d => d.unit))];
 
-    // Main Summary Table (Program x Jenjang)
-    let jenjangTotals = Array(jenjangs.length).fill(0);
-    let programRowsHTML = '';
+    let tableBodyHTML = '';
+    let jenjangChartLabels = [];
+    let jenjangChartValues = [];
 
-    programs.forEach(prog => {
-      let pSum = 0;
-      let colsHTML = '';
-      jenjangs.forEach((j, idx) => {
-        const val = finalData.filter(d => d.program === prog && d.jenjang === j).reduce((s, d) => s + d.totalCMB, 0);
-        pSum += val;
-        jenjangTotals[idx] += val;
-        colsHTML += `<td>${val}</td>`;
+    units.forEach(unit => {
+      const unitItems = finalData.filter(d => d.unit === unit);
+      const jenjangs = [...new Set(unitItems.map(d => d.jenjang))];
+
+      let unitTotalClosing = 0, unitTotalUPP = 0, unitTotalUPF = 0, unitTotalCancel = 0, unitTotalFormProses = 0;
+
+      // Count total rows for unit rowspan
+      let unitRowCount = 0;
+      jenjangs.forEach(jenj => {
+        const jenjItems = unitItems.filter(d => d.jenjang === jenj);
+        const uniquePrograms = [...new Set(jenjItems.map(d => d.program))];
+        unitRowCount += uniquePrograms.length + 1; // +1 for jenjang subtotal row
       });
 
-      programRowsHTML += `
-        <tr>
-          <td class="text-left font-semibold bg-slate-50">${prog}</td>
-          ${colsHTML}
-          <td class="font-bold bg-amber-50 text-amber-800">${pSum}</td>
-        </tr>
-      `;
+      let isFirstUnitRow = true;
+
+      jenjangs.forEach(jenj => {
+        const jenjItems = unitItems.filter(d => d.jenjang === jenj);
+        const uniquePrograms = [...new Set(jenjItems.map(d => d.program))];
+        let jenjTotalClosing = 0, jenjTotalUPP = 0, jenjTotalUPF = 0, jenjTotalCancel = 0, jenjTotalFormProses = 0;
+
+        let isFirstJenjRow = true;
+
+        uniquePrograms.forEach(prog => {
+          const progItems = jenjItems.filter(d => d.program === prog);
+          
+          let progClosingForm = 0;
+          let progUPProses = 0;
+          let progUPSelesai = 0;
+          let progCancel = 0;
+          
+          progItems.forEach(item => {
+            progClosingForm += item.closingForm || 0;
+            progUPProses += item.upProses || 0;
+            progUPSelesai += item.upSelesai || 0;
+            progCancel += item.cancel || 0;
+          });
+
+          const lanjut = Math.max(0, progClosingForm - progCancel);
+          const formProses = Math.max(0, lanjut - progUPSelesai - progUPProses);
+
+          jenjTotalClosing += progClosingForm;
+          jenjTotalUPP += progUPProses;
+          jenjTotalUPF += progUPSelesai;
+          jenjTotalCancel += progCancel;
+          jenjTotalFormProses += formProses;
+
+          tableBodyHTML += `<tr>`;
+
+          // Unit cell with rowspan (only on first row of unit)
+          if (isFirstUnitRow) {
+            tableBodyHTML += `<td rowspan="${unitRowCount}" class="unit-cell text-left">${unit}</td>`;
+            isFirstUnitRow = false;
+          }
+
+          // Jenjang cell with rowspan (only on first row of jenjang)
+          if (isFirstJenjRow) {
+            tableBodyHTML += `<td rowspan="${uniquePrograms.length + 1}" class="jenjang-cell text-left">${jenj}</td>`;
+            isFirstJenjRow = false;
+          }
+
+          tableBodyHTML += `
+              <td class="program-cell">${prog}</td>
+              <td class="col-closing-form">${progClosingForm}</td>
+              <td class="col-up-proses">${progUPProses}</td>
+              <td class="col-up-selesai">${progUPSelesai}</td>
+              <td class="col-cancel">${progCancel}</td>
+              <td class="col-form-proses">${formProses}</td>
+            </tr>`;
+        });
+
+        // Jenjang subtotal row
+        const jenjLanjut = Math.max(0, jenjTotalClosing - jenjTotalCancel);
+        const jenjFormProses = Math.max(0, jenjLanjut - jenjTotalUPF - jenjTotalUPP);
+
+        tableBodyHTML += `
+          <tr class="subtotal-jenjang-row">
+            <td class="text-left font-bold">Jumlah</td>
+            <td>${jenjTotalClosing}</td>
+            <td>${jenjTotalUPP}</td>
+            <td>${jenjTotalUPF}</td>
+            <td>${jenjTotalCancel}</td>
+            <td>${jenjFormProses}</td>
+          </tr>`;
+
+        unitTotalClosing += jenjTotalClosing;
+        unitTotalUPP += jenjTotalUPP;
+        unitTotalUPF += jenjTotalUPF;
+        unitTotalCancel += jenjTotalCancel;
+        unitTotalFormProses += jenjFormProses;
+
+        // Track for pie chart
+        const existingIdx = jenjangChartLabels.indexOf(jenj);
+        if (existingIdx >= 0) {
+          jenjangChartValues[existingIdx] += jenjTotalClosing;
+        } else {
+          jenjangChartLabels.push(jenj);
+          jenjangChartValues.push(jenjTotalClosing);
+        }
+      });
     });
 
-    let jenjangTotalsColsHTML = jenjangTotals.map(tot => `<td>${tot}</td>`).join('');
+    // Grand total row
+    const gtLanjut = Math.max(0, grandClosingForm - grandCancel);
+    const gtFormProses = Math.max(0, gtLanjut - grandUPSelesai - grandUPProses);
 
-    htmlContent += `
+    tableBodyHTML += `
+      <tr class="total-row-blue">
+        <td colspan="3" class="text-left">TOTAL KESELURUHAN</td>
+        <td>${grandClosingForm}</td>
+        <td>${grandUPProses}</td>
+        <td>${grandUPSelesai}</td>
+        <td>${grandCancel}</td>
+        <td class="highlight-accent">${gtFormProses}</td>
+      </tr>`;
+
+    const fullTableHTML = `
       <div class="table-card">
         <div class="table-header-banner banner-emerald">
-          <span>REKAP CMB PER PROGRAM (SELURUH JENJANG)</span>
-          <span class="text-xs opacity-80 font-normal">Total: ${totalCMB} CMB</span>
+          <span>👥 REKAPITULASI CMB PER UNIT / JENJANG / PROGRAM</span>
+          <span class="text-xs opacity-80 font-normal">Total Closing Formulir: ${grandClosingForm} • Lanjut Pendaftaran: ${gtLanjut}</span>
         </div>
         <div class="table-card-body">
           <div class="table-responsive">
             <table class="custom-table">
               <thead>
                 <tr>
+                  <th class="text-left">Unit</th>
+                  <th class="text-left">Jenjang</th>
                   <th class="text-left">Program</th>
-                  ${jenjangs.map(j => `<th>${j}</th>`).join('')}
-                  <th class="th-highlight-amber">TOTAL</th>
+                  <th>Closing Formulir</th>
+                  <th>UP + Progress</th>
+                  <th>UP + Finish</th>
+                  <th>Cancel</th>
+                  <th class="th-highlight-green">Formulir (Proses)</th>
                 </tr>
               </thead>
               <tbody>
-                ${programRowsHTML}
-                <tr class="total-row-blue">
-                  <td class="text-left">TOTAL</td>
-                  ${jenjangTotalsColsHTML}
-                  <td class="highlight-accent text-base">${totalCMB}</td>
-                </tr>
+                ${tableBodyHTML}
               </tbody>
             </table>
           </div>
@@ -905,59 +1114,14 @@
       </div>
     `;
 
-    // Breakdown per Unit and Jenjang
-    units.forEach(unit => {
-      const unitJenjangs = [...new Set(finalData.filter(d => d.unit === unit).map(d => d.jenjang))];
+    tableContainer.innerHTML = fullTableHTML;
 
-      unitJenjangs.forEach(jenj => {
-        const filteredItems = finalData.filter(d => d.unit === unit && d.jenjang === jenj);
-        const itemPrograms = [...new Set(filteredItems.map(d => d.program))];
-        let subtotalJenjang = 0;
-
-        let unitRowsHTML = '';
-        itemPrograms.forEach(prog => {
-          const val = filteredItems.filter(d => d.program === prog).reduce((s, d) => s + d.totalCMB, 0);
-          subtotalJenjang += val;
-          unitRowsHTML += `
-            <tr>
-              <td class="text-left font-medium">${prog}</td>
-              <td class="font-semibold">${val}</td>
-            </tr>
-          `;
-        });
-
-        htmlContent += `
-          <div class="table-card">
-            <div class="table-header-banner banner-primary">
-              <span>REKAP CMB ${unit.toUpperCase()} &bull; JENJANG ${jenj.toUpperCase()}</span>
-              <span class="text-xs opacity-80 font-normal">Subtotal: ${subtotalJenjang}</span>
-            </div>
-            <div class="table-card-body">
-              <div class="table-responsive">
-                <table class="custom-table">
-                  <thead>
-                    <tr class="bg-amber-300 text-slate-900">
-                      <th class="text-left text-slate-900 bg-amber-300 border-amber-400">Program</th>
-                      <th class="w-36 text-slate-900 bg-amber-300 border-amber-400">Jumlah CMB</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${unitRowsHTML}
-                    <tr class="total-row">
-                      <td class="text-left">JUMLAH (${jenj})</td>
-                      <td class="text-base">${subtotalJenjang}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        `;
-      });
-    });
-
-    tableContainer.innerHTML = htmlContent;
-    renderPieChart(jenjangs, jenjangTotals, ['#2563EB', '#16A34A', '#EA580C', '#9333EA', '#CA8A04', '#0891B2']);
+    // Render pie chart by jenjang
+    renderPieChart(
+      jenjangChartLabels,
+      jenjangChartValues,
+      ['#2563EB', '#16A34A', '#EA580C', '#9333EA', '#CA8A04', '#0891B2']
+    );
   }
 
   // --- MENU 3: REKAPITULASI MURID ---
