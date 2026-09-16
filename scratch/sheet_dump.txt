@@ -1,0 +1,16 @@
+Cols:
+Col 0: Tanggal
+Col 1: Nama CS
+Col 2: New Leads
+Col 3: Existing Leads
+Col 4: Total Leads
+Col 5: 📲 Call In
+Col 6: 👍🏻 Potensial
+Col 7: 🔥 Prospect
+Col 8: 🚫 Tidak Prospect
+Col 9: ❗ Kuota Full
+Col 10: ✅ Closing Form
+Col 11: Total Leads
+Col 12: Catatan
+
+Rows:

@@ -422,10 +422,14 @@
   // 3. Murid Parser
   function parseMuridFromSheet(sheet) {
     const rows = sheet.rows;
+    
+    // The standard 7 programs used in the sheet columns
     const programList = ['DLP', 'DL', 'DLT', 'INK', 'KOM', 'KOP', 'KOR'];
+    
     const sectionsDef = [
-      { sumber: 'Homeschooling Kak Seto', title: 'HOMESCHOOLING KAK SETO', keyword: 'HOMESCHOOLING' },
-      { sumber: 'Kak Seto School', title: 'KAK SETO SCHOOL', keyword: 'KAK SETO SCHOOL' }
+      { sumber: 'Homeschooling Kak Seto', title: 'HOMESCHOOLING KAK SETO', keyword: 'HOMESCHOOLING', altKeyword: 'HSKS' },
+      { sumber: 'Kak Seto School', title: 'KAK SETO SCHOOL', keyword: 'KAK SETO SCHOOL', altKeyword: 'KSS' },
+      { sumber: 'Sekolah Khusus Kak Seto', title: 'SEKOLAH KHUSUS KAK SETO', keyword: 'SEKOLAH KHUSUS', altKeyword: 'SKKS' }
     ];
 
     const sheetMuridObj = {
@@ -443,15 +447,15 @@
       };
 
       ['SD', 'SMP', 'SMA'].forEach(jenjName => {
-        // Find column containing secDef.keyword and jenjName
         let targetCol = -1;
         let headerRow = -1;
 
+        // Try to find header containing both jenjang and unit keyword in the same cell
         for (let rIdx = 0; rIdx < rows.length; rIdx++) {
           const c = rows[rIdx]?.c || [];
           for (let cIdx = 20; cIdx < c.length; cIdx++) {
             const txt = String(c[cIdx]?.v || '').toUpperCase();
-            if (txt.includes(jenjName) && txt.includes(secDef.keyword)) {
+            if (txt.includes(jenjName) && (txt.includes(secDef.keyword) || txt.includes(secDef.altKeyword))) {
               targetCol = cIdx;
               headerRow = rIdx;
               break;
@@ -460,9 +464,57 @@
           if (targetCol !== -1) break;
         }
 
-        if (targetCol === -1) return;
+        // Loose match: Unit header might be a merged cell, and Jenjang is in a row below it
+        if (targetCol === -1) {
+           for (let rIdx = 0; rIdx < rows.length - 1; rIdx++) {
+              const c = rows[rIdx]?.c || [];
+              let lastSeenUnit = false;
+              for (let cIdx = 20; cIdx < c.length; cIdx++) {
+                 const txt = String(c[cIdx]?.v || '').toUpperCase();
+                 if (txt) {
+                    if (txt.includes(secDef.keyword) || txt.includes(secDef.altKeyword)) {
+                        lastSeenUnit = true;
+                    } else {
+                        lastSeenUnit = false;
+                    }
+                 }
+                 
+                 if (lastSeenUnit) {
+                    for (let lookBelow = 1; lookBelow <= 3; lookBelow++) {
+                        if (rIdx + lookBelow < rows.length) {
+                            const belowTxt = String(rows[rIdx + lookBelow]?.c?.[cIdx]?.v || '').toUpperCase();
+                            const regex = new RegExp(`\\b${jenjName}\\b`);
+                            if (regex.test(belowTxt)) {
+                                targetCol = cIdx;
+                                headerRow = rIdx + lookBelow;
+                                break;
+                            }
+                        }
+                    }
+                 }
+                 if (targetCol !== -1) break;
+              }
+              if (targetCol !== -1) break;
+           }
+        }
 
-        // Find "Kelas" row below headerRow
+        // Tentukan default program list berdasarkan sumber
+        const defaultProgramsForSumber = secDef.sumber === 'Kak Seto School'
+          ? ['Reguler', 'Inklusi']
+          : programList;
+
+        if (targetCol === -1) {
+            // Inject empty jenjang untuk SEMUA sumber agar semua jenjang selalu tampil di UI
+            secItem.jenjangs.push({
+                name: jenjName,
+                targetCol: -1,
+                programs: defaultProgramsForSumber,
+                rows: [],
+                total: 0
+            });
+            return;
+        }
+
         let classLabelRow = -1;
         for (let rIdx = headerRow; rIdx < Math.min(headerRow + 15, rows.length); rIdx++) {
           const txt = String(rows[rIdx]?.c?.[targetCol]?.v || '').toLowerCase();
@@ -472,11 +524,94 @@
           }
         }
 
-        if (classLabelRow === -1) return;
+        if (classLabelRow === -1) {
+            secItem.jenjangs.push({
+                name: jenjName,
+                targetCol: -1,
+                programs: defaultProgramsForSumber,
+                rows: [],
+                total: 0
+            });
+            return;
+        }
 
-        // Extract class rows under targetCol
-        const classRows = [];
+        // Tentukan Program List dan Index Kolom
+        let programListToUse = [];
+        let extractedIndices = [];
         const progStartCol = targetCol + 1;
+
+        if (secDef.sumber === 'Kak Seto School') {
+           let colOffset = 0;
+           let foundHeaders = false;
+
+           // Scan seluruh baris classLabelRow untuk menemukan header Reguler dan Inklusi
+           const maxScan = Math.min(progStartCol + 15, rows[classLabelRow]?.c?.length || 0);
+           for (let scanIdx = progStartCol; scanIdx < maxScan; scanIdx++) {
+             const headerVal = String(rows[classLabelRow]?.c?.[scanIdx]?.v || '').trim();
+             const lowerHeader = headerVal.toLowerCase();
+
+             if (lowerHeader.includes('total') || lowerHeader.includes('jumlah')) break;
+
+             if (headerVal) {
+               foundHeaders = true;
+               const offset = scanIdx - progStartCol;
+               if (lowerHeader.includes('reguler')) {
+                 programListToUse.push('Reguler');
+                 extractedIndices.push(offset);
+               } else if (
+                 lowerHeader.includes('inklusi') ||
+                 lowerHeader.includes('inklusif') ||
+                 lowerHeader.includes('ink') ||
+                 lowerHeader === 'ink'
+               ) {
+                 programListToUse.push('Inklusi');
+                 extractedIndices.push(offset);
+               }
+             }
+           }
+
+           // Jika header tidak terdeteksi secara dynamic, lakukan fallback scan lebih luas
+           if (!foundHeaders || programListToUse.length === 0) {
+             // Coba scan baris-baris di sekitar classLabelRow (±2 baris)
+             const scanRangeStart = Math.max(0, classLabelRow - 1);
+             const scanRangeEnd = Math.min(rows.length - 1, classLabelRow + 2);
+             programListToUse = [];
+             extractedIndices = [];
+             for (let scanRow = scanRangeStart; scanRow <= scanRangeEnd; scanRow++) {
+               const maxFallback = Math.min(progStartCol + 15, rows[scanRow]?.c?.length || 0);
+               for (let scanIdx = progStartCol; scanIdx < maxFallback; scanIdx++) {
+                 const headerVal = String(rows[scanRow]?.c?.[scanIdx]?.v || '').trim();
+                 const lowerHeader = headerVal.toLowerCase();
+                 if (lowerHeader.includes('reguler') && !programListToUse.includes('Reguler')) {
+                   programListToUse.push('Reguler');
+                   extractedIndices.push(scanIdx - progStartCol);
+                 } else if (
+                   (lowerHeader.includes('inklusi') || lowerHeader.includes('inklusif') || (lowerHeader.includes('ink') && lowerHeader.length <= 8)) &&
+                   !programListToUse.includes('Inklusi')
+                 ) {
+                   programListToUse.push('Inklusi');
+                   extractedIndices.push(scanIdx - progStartCol);
+                 }
+               }
+               if (programListToUse.length >= 2) break;
+             }
+           }
+
+           // Last resort fallback: gunakan offset 0=Reguler, 4=Inklusi (berdasarkan pola kolom standar sheet)
+           if (programListToUse.length === 0) {
+             programListToUse = ['Reguler', 'Inklusi'];
+             extractedIndices = [0, 4];
+             console.warn('[DEBUG KSS] Tidak ada header Reguler/Inklusi terdeteksi, pakai fallback offset [0,4]. Sheet:', sheet.sheetName, 'Jenjang:', jenjName);
+           } else {
+             console.log('[DEBUG KSS] Header terdeteksi:', programListToUse, 'indices:', extractedIndices, 'Sheet:', sheet.sheetName, 'Jenjang:', jenjName);
+           }
+        } else {
+           // Jangan ubah sekolah/program lain yang sudah berjalan benar
+           programListToUse = ['DLP', 'DL', 'DLT', 'INK', 'KOM', 'KOP', 'KOR'];
+           extractedIndices = [0, 1, 2, 3, 4, 5, 6];
+        }
+
+        const classRows = [];
 
         for (let rIdx = classLabelRow + 1; rIdx < rows.length; rIdx++) {
           const cellVal = String(rows[rIdx]?.c?.[targetCol]?.v || '').trim();
@@ -484,8 +619,8 @@
           if (cellVal.toLowerCase().includes('jumlah') || cellVal.toLowerCase().includes('total')) break;
 
           const progValues = [];
-          programList.forEach((p, pIdx) => {
-            const val = parseCellNum(rows[rIdx]?.c?.[progStartCol + pIdx]);
+          extractedIndices.forEach(idx => {
+            const val = parseCellNum(rows[rIdx]?.c?.[progStartCol + idx]);
             progValues.push(val);
           });
 
@@ -500,15 +635,20 @@
         secItem.jenjangs.push({
           name: jenjName,
           targetCol,
+          programs: programListToUse, 
           rows: classRows,
           total: classRows.reduce((a, b) => a + b.total, 0)
         });
       });
 
-      sheetMuridObj.sections.push(secItem);
+      if (secItem.jenjangs.length > 0) {
+        sheetMuridObj.sections.push(secItem);
+      }
     });
 
-    parsedMuridData.push(sheetMuridObj);
+    if (sheetMuridObj.sections.length > 0) {
+      parsedMuridData.push(sheetMuridObj);
+    }
   }
 
   // --- DATE NORMALIZATION UTILITIES ---
@@ -1132,50 +1272,67 @@
     const chartTitle = document.getElementById('chartTitle');
     if (chartTitle) chartTitle.textContent = '📊 Distribusi Murid per Jenjang';
 
-    const programList = ['DLP', 'DL', 'DLT', 'INK', 'KOM', 'KOP', 'KOR'];
-
     // Filter Murid data by sheet month and year
     const dateFilteredSheets = parsedMuridData.filter(s => matchDateFilter(s.month, s.year));
 
-    // Aggregate sections across matched sheets
-    const aggregatedSections = [
-      { sumber: 'Homeschooling Kak Seto', title: 'HOMESCHOOLING KAK SETO', jenjangs: [] },
-      { sumber: 'Kak Seto School', title: 'KAK SETO SCHOOL', jenjangs: [] }
+    const allSumberList = [
+      { sumber: 'Homeschooling Kak Seto', title: 'HOMESCHOOLING KAK SETO' },
+      { sumber: 'Kak Seto School', title: 'KAK SETO SCHOOL' },
+      { sumber: 'Sekolah Khusus Kak Seto', title: 'SEKOLAH KHUSUS KAK SETO' }
     ];
 
     // Populate Sumber filter
-    populateSpecificFilter([
-      { sumber: 'Homeschooling Kak Seto' },
-      { sumber: 'Kak Seto School' }
-    ], 'sumber');
-
+    populateSpecificFilter(allSumberList, 'sumber');
     const selectedSumber = document.getElementById('csFilter')?.value || 'ALL';
 
-    // Merge sections across sheets
-    const jenjangNames = ['SD', 'SMP', 'SMA'];
-    aggregatedSections.forEach(sec => {
-      jenjangNames.forEach(jenjName => {
-        const classMap = new Map(); // className -> array of 7 program values
+    const finalSections = [];
 
-        dateFilteredSheets.forEach(sheetMurid => {
-          const matchingSec = sheetMurid.sections.find(s => s.sumber === sec.sumber);
-          const matchingJenj = matchingSec?.jenjangs.find(j => j.name === jenjName);
-          if (matchingJenj) {
-            matchingJenj.rows.forEach(r => {
-              if (!classMap.has(r.className)) {
-                classMap.set(r.className, Array(programList.length).fill(0));
+    allSumberList.forEach(secDef => {
+      if (selectedSumber !== 'ALL' && selectedSumber !== secDef.sumber) return;
+
+      const jenjangsMap = new Map();
+
+      dateFilteredSheets.forEach(sheetMurid => {
+        const matchingSec = sheetMurid.sections.find(s => s.sumber === secDef.sumber);
+        if (matchingSec) {
+          matchingSec.jenjangs.forEach(sheetJenj => {
+            if (!jenjangsMap.has(sheetJenj.name)) {
+              jenjangsMap.set(sheetJenj.name, {
+                programs: sheetJenj.programs,
+                rowsMap: new Map()
+              });
+            }
+
+            const aggJenj = jenjangsMap.get(sheetJenj.name);
+            sheetJenj.rows.forEach(r => {
+              if (!aggJenj.rowsMap.has(r.className)) {
+                aggJenj.rowsMap.set(r.className, Array(aggJenj.programs.length).fill(0));
               }
-              const currentVals = classMap.get(r.className);
+              const currentVals = aggJenj.rowsMap.get(r.className);
               r.progValues.forEach((val, pIdx) => {
-                currentVals[pIdx] += val;
+                if (pIdx < currentVals.length) {
+                  currentVals[pIdx] += val;
+                }
               });
             });
-          }
-        });
+          });
+        }
+      });
 
-        if (classMap.size > 0) {
+      const secJenjangs = [];
+      const jenjangNames = ['SD', 'SMP', 'SMA'];
+
+      // Default program list per sumber (agar jenjang kosong tetap punya kolom yang benar)
+      const defaultProgramsForSec = secDef.sumber === 'Kak Seto School'
+        ? ['Reguler', 'Inklusi']
+        : ['DLP', 'DL', 'DLT', 'INK', 'KOM', 'KOP', 'KOR'];
+
+      jenjangNames.forEach(jName => {
+        if (jenjangsMap.has(jName)) {
+          const aggJenj = jenjangsMap.get(jName);
           const mergedRows = [];
-          classMap.forEach((progValues, className) => {
+
+          aggJenj.rowsMap.forEach((progValues, className) => {
             mergedRows.push({
               className: className,
               progValues: progValues,
@@ -1183,18 +1340,40 @@
             });
           });
 
-          sec.jenjangs.push({
-            name: jenjName,
+          secJenjangs.push({
+            name: jName,
+            programs: aggJenj.programs,
             rows: mergedRows,
             total: mergedRows.reduce((a, b) => a + b.total, 0)
           });
+        } else {
+          // Jenjang tidak ditemukan di data — tetap tampilkan dengan rows kosong
+          secJenjangs.push({
+            name: jName,
+            programs: defaultProgramsForSec,
+            rows: [],
+            total: 0
+          });
         }
+      });
+
+      // Selalu tampilkan section, walaupun semua jenjang kosong
+      finalSections.push({
+        sumber: secDef.sumber,
+        title: secDef.title,
+        jenjangs: secJenjangs
       });
     });
 
-    const finalSections = (selectedSumber === 'ALL')
-      ? aggregatedSections
-      : aggregatedSections.filter(s => s.sumber === selectedSumber);
+
+    const tableContainer = document.getElementById('dynamicTableContainer');
+    if (!tableContainer) return;
+
+    if (dateFilteredSheets.length === 0) {
+      tableContainer.innerHTML = renderEmptyStateHTML('Tidak ada data murid untuk periode yang dipilih.');
+      renderPieChart([], [], []);
+      return;
+    }
 
     let htmlContent = '';
     let overallTotal = 0;
@@ -1202,11 +1381,18 @@
 
     finalSections.forEach(sec => {
       sec.jenjangs.forEach(j => {
+        let displayPrograms = j.programs;
+        let displayRows = j.rows.map(r => ({
+            className: r.className,
+            progValues: [...r.progValues],
+            total: r.total
+        }));
+
         let jenjangTotal = 0;
-        let progTotals = Array(programList.length).fill(0);
+        let progTotals = Array(displayPrograms.length).fill(0);
         let classRowsHTML = '';
 
-        j.rows.forEach(r => {
+        displayRows.forEach(r => {
           jenjangTotal += r.total;
           let colsHTML = '';
           r.progValues.forEach((val, pIdx) => {
@@ -1237,7 +1423,7 @@
                   <thead>
                     <tr class="bg-amber-300 text-slate-900">
                       <th class="w-20 text-slate-900 bg-amber-300 border-amber-400">Kelas</th>
-                      ${programList.map(p => `<th class="text-slate-900 bg-amber-300 border-amber-400">${p}</th>`).join('')}
+                      ${displayPrograms.map(p => `<th class="text-slate-900 bg-amber-300 border-amber-400">${p}</th>`).join('')}
                       <th class="text-slate-900 bg-amber-400 border-amber-400">TOTAL</th>
                     </tr>
                   </thead>
@@ -1258,75 +1444,83 @@
         overallTotal += jenjangTotal;
         jenjangSummaryMap[j.name] = (jenjangSummaryMap[j.name] || 0) + jenjangTotal;
       });
+
     });
 
-    // Summary Table (Program x Jenjang)
-    const activeJenjangNames = Object.keys(jenjangSummaryMap);
-    let summaryTableHTML = '';
 
-    if (activeJenjangNames.length > 0) {
-      let programSummaryRowsHTML = '';
-      programList.forEach((p, pIdx) => {
-        let pTotal = 0;
-        let jColsHTML = '';
+    // --- REKAP PER PROGRAM SELURUH JENJANG (dikelompokkan per Unit → Jenjang) ---
+    let rekapPerProgramHTML = '';
+    if (overallTotal > 0) {
+      let rekapUnitsHTML = '';
 
-        activeJenjangNames.forEach(jName => {
-          let pVal = 0;
-          finalSections.forEach(sec => {
-            const foundJenj = sec.jenjangs.find(j => j.name === jName);
-            if (foundJenj) {
-              foundJenj.rows.forEach(r => {
-                pVal += (r.progValues[pIdx] || 0);
-              });
-            }
+      finalSections.forEach(sec => {
+        let rekapJenjangHTML = '';
+
+        sec.jenjangs.forEach(j => {
+          // Hitung total per program untuk jenjang ini
+          const jProgTotals = Array(j.programs.length).fill(0);
+          j.rows.forEach(r => {
+            r.progValues.forEach((val, idx) => {
+              jProgTotals[idx] += val;
+            });
           });
-          pTotal += pVal;
-          jColsHTML += `<td>${pVal}</td>`;
+          const jTotal = jProgTotals.reduce((a, b) => a + b, 0);
+
+          rekapJenjangHTML += `
+            <div class="pl-4 border-l-4 border-blue-300 mb-4">
+              <h5 class="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <span class="text-blue-400 font-mono">├──</span> ${j.name}
+                <span class="text-xs font-normal text-slate-500 ml-2">(${jTotal} Murid)</span>
+              </h5>
+              <div class="pl-4 overflow-x-auto">
+                <table class="custom-table w-auto text-sm border border-slate-200">
+                  <thead>
+                    <tr class="bg-slate-100">
+                      ${j.programs.map(p => `<th class="px-3 py-1 text-slate-800">${p}</th>`).join('')}
+                      <th class="px-3 py-1 bg-amber-100 text-amber-800">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      ${jProgTotals.map(val => `<td class="text-center px-3 py-1">${val}</td>`).join('')}
+                      <td class="text-center font-bold px-3 py-1 bg-amber-50 text-amber-700">${jTotal}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
         });
 
-        programSummaryRowsHTML += `
-          <tr>
-            <td class="text-left font-bold bg-slate-50">${p}</td>
-            ${jColsHTML}
-            <td class="font-bold bg-amber-50 text-amber-800">${pTotal}</td>
-          </tr>
+        const secTotal = sec.jenjangs.reduce((acc, j) => {
+          return acc + j.rows.reduce((a, r) => a + r.total, 0);
+        }, 0);
+
+        rekapUnitsHTML += `
+          <div class="mb-8">
+            <h4 class="text-base font-bold text-slate-800 mb-3 pb-2 border-b-2 border-slate-200 flex items-center gap-2">
+              <span>🏫</span> ${sec.title}
+              <span class="text-xs font-normal text-slate-500 ml-2">(Total: ${secTotal} Murid)</span>
+            </h4>
+            ${rekapJenjangHTML}
+          </div>
         `;
       });
 
-      let jenjangTotalCols = activeJenjangNames.map(j => `<td>${jenjangSummaryMap[j]}</td>`).join('');
-
-      summaryTableHTML = `
-        <div class="table-card">
+      rekapPerProgramHTML = `
+        <div class="table-card mt-6">
           <div class="table-header-banner banner-emerald">
-            <span>REKAP PER PROGRAM (SELURUH JENJANG)</span>
-            <span class="text-xs opacity-80 font-normal">Total: ${overallTotal} Murid</span>
+            <span>📊 REKAP PER PROGRAM SELURUH JENJANG</span>
+            <span class="text-xs opacity-80 font-normal">Total Keseluruhan: ${overallTotal} Murid</span>
           </div>
-          <div class="table-card-body">
-            <div class="table-responsive">
-              <table class="custom-table">
-                <thead>
-                  <tr>
-                    <th class="text-left">Program</th>
-                    ${activeJenjangNames.map(j => `<th>${j}</th>`).join('')}
-                    <th class="th-highlight-amber">TOTAL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${programSummaryRowsHTML}
-                  <tr class="total-row-blue">
-                    <td class="text-left">TOTAL</td>
-                    ${jenjangTotalCols}
-                    <td class="highlight-accent text-base">${overallTotal}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div class="table-card-body p-4 sm:p-6 bg-white">
+            ${rekapUnitsHTML}
           </div>
         </div>
       `;
     }
 
-    // Render Metric Card
+    // Render metrics card
     const metricsContainer = document.getElementById('metricsContainer');
     if (metricsContainer) {
       metricsContainer.innerHTML = `
@@ -1337,23 +1531,19 @@
       `;
     }
 
-    const tableContainer = document.getElementById('dynamicTableContainer');
-    if (!tableContainer) return;
-
-    if (overallTotal === 0 && !summaryTableHTML) {
-      tableContainer.innerHTML = renderEmptyStateHTML('Tidak ada data murid untuk periode yang dipilih.');
-      renderPieChart([], [], []);
-      return;
-    }
-
-    tableContainer.innerHTML = summaryTableHTML + htmlContent;
-
+    // Render chart berdasarkan total per jenjang
+    const jenjangChartLabels = Object.keys(jenjangSummaryMap);
+    const jenjangChartValues = jenjangChartLabels.map(k => jenjangSummaryMap[k]);
     renderPieChart(
-      Object.keys(jenjangSummaryMap),
-      Object.values(jenjangSummaryMap),
-      ['#2563EB', '#16A34A', '#EA580C', '#9333EA']
+      jenjangChartLabels,
+      jenjangChartValues,
+      ['#2563EB', '#16A34A', '#EA580C', '#9333EA', '#CA8A04', '#0891B2']
     );
+
+    // Render seluruh konten ke DOM
+    tableContainer.innerHTML = htmlContent + rekapPerProgramHTML;
   }
+
 
   // --- FILTER DROPDOWN UTILITY ---
   function populateSpecificFilter(data, keyName) {

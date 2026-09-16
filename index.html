@@ -1,32 +1,31 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Dashboard Tracking CS SKS - Real-time Data Visualization dari Google Sheets Sekolah Kak Seto">
+  <meta name="description"
+    content="Dashboard Tracking CS SKS - Real-time Data Visualization dari Google Sheets Sekolah Kak Seto">
   <title>Dashboard Tracking CS SKS - Sekolah Kak Seto</title>
-  
+
   <!-- Tailwind CSS CDN for utility support & Chart.js -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
+
   <!-- Custom Design System Stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <div class="dashboard-container">
-    
+
     <!-- CONTAINER LOGO SEKOLAH KAK SETO -->
     <div class="brand-banner">
-      <img 
-        src="img/logo-kakseto.jpeg" 
-        alt="Logo Sekolah Kak Seto" 
-        class="brand-logo" 
-        onerror="this.onerror=null; this.src='https://dummyimage.com/600x200/ffffff/ed1c24&text=SEKOLAH+KAK+SETO';"
-      >
+      <img src="img/logo-kakseto.jpeg" alt="Logo Sekolah Kak Seto" class="brand-logo"
+        onerror="this.onerror=null; this.src='https://dummyimage.com/600x200/ffffff/ed1c24&text=SEKOLAH+KAK+SETO';">
     </div>
-    
+
     <!-- HEADER DASHBOARD & FILTER PERIODE -->
     <header class="dashboard-header">
       <div class="header-title-group">
@@ -37,7 +36,7 @@
         </div>
         <p>Real-time visualisasi data dinamis dari Google Sheets Sekolah Kak Seto</p>
       </div>
-      
+
       <!-- WRAPPER FILTER TOOLBAR -->
       <div class="filter-toolbar">
         <!-- FILTER BULAN -->
@@ -131,4 +130,5 @@
   <!-- Main JavaScript File -->
   <script src="script.js" defer></script>
 </body>
+
 </html>
